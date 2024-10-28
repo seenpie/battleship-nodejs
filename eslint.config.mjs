@@ -1,6 +1,7 @@
 import typescriptEslint from "@typescript-eslint/eslint-plugin";
 import prettier from "eslint-plugin-prettier";
 import tsParser from "@typescript-eslint/parser";
+import importPlug from "eslint-plugin-import-x";
 import js from "@eslint/js";
 import { FlatCompat } from "@eslint/eslintrc";
 import { fileURLToPath } from "url";
@@ -19,12 +20,13 @@ export default [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
     "plugin:prettier/recommended",
-    "plugin:import/recommended",
-    "plugin:import/typescript"
+    "plugin:import-x/recommended",
+    "plugin:import-x/typescript"
   ),
   {
     plugins: {
       "@typescript-eslint": typescriptEslint,
+      importPlug,
       prettier
     },
     ignores: ["dist", "*.config.*", "node_modules"],
@@ -38,7 +40,7 @@ export default [
       }
     },
     settings: {
-      "import/resolver": {
+      "import-x/resolver": {
         typescript: {
           project: "./tsconfig.json"
         }
@@ -47,6 +49,11 @@ export default [
     rules: {
       "prettier/prettier": "warn",
       "@typescript-eslint/no-explicit-any": "error",
+
+      "import-x/no-cycle": "error",
+      "import-x/no-extraneous-dependencies": "error",
+      "import-x/no-self-import": "error",
+      "import-x/no-useless-path-segments": "error",
 
       "no-console": [
         "warn",
@@ -59,7 +66,8 @@ export default [
         "error",
         {
           args: "after-used",
-          argsIgnorePattern: "^_"
+          argsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_"
         }
       ]
     }
