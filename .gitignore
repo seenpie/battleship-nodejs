@@ -1,6 +1,9 @@
 # dependencies
 /node_modules
 
+#files
+.env
+
 # System Files
 .DS_Store
 Thumbs.db
