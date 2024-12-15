@@ -1,4 +1,4 @@
-import { Game, Player } from "@/features/game/game.entity";
+import { Game, GameMember } from "@/features/game/game.entity";
 import {
   ClientAddShipsData,
   ClientAttackData
@@ -8,130 +8,86 @@ import { createShipsMap } from "@/features/game/helpers/create-ships-map";
 import { Coords, ShipsData } from "@/features/game/game.type";
 import { createCoordKey } from "@/features/game/helpers/create-coord-key";
 import { randomNum } from "@/utils/random-num";
-import {
-  createResponse,
-  getFinishTemplate
-} from "@/ws-server/helpers/response-templates";
-import { ServerResponseType } from "@/ws-server/ws-server.enum";
 
 export class GameService {
-  private game: Game | null = null;
   private repo = gameRepository;
 
-  getGameResult() {
-    if (!this.game) {
-      throw new Error("Game didn't initialize");
-    }
-    if (!this.game.winnerId) {
+  getGameResult(game: Game) {
+    if (!game.winnerId) {
       throw new Error("Game did not ended");
     }
 
-    const players = this.getPlayersDataEntries().map(
+    const players = [...game.playersData.entries()].map(
       ([_, { player }]) => player
     );
 
     return {
       players,
-      winnerId: this.game.winnerId
+      winnerId: game.winnerId
     };
   }
 
-  unlink(playerId?: string) {
-    if (this.game && !this.game.winnerId && playerId) {
-      const [enemyId, { player }] = this.getEnemyData(playerId);
-      this.closeGame(enemyId);
-      const finishTemplate = getFinishTemplate();
-      finishTemplate.winPlayer = enemyId;
-      const response = createResponse(
-        ServerResponseType.FINISH,
-        JSON.stringify(finishTemplate)
-      );
-      player.webSocket.send(JSON.stringify(response));
+  createGame(players: GameMember[]): Game {
+    const newGame = new Game(players);
+    this.repo.add(newGame);
+    return newGame;
+  }
+
+  addShips({ indexPlayer, ships, gameId }: ClientAddShipsData): Game {
+    const game = this.repo.getById(gameId.toString());
+    if (!game) {
+      throw new Error("game not found");
     }
-    this.game = null;
-  }
 
-  createGame(players: Player[]) {
-    this.game = new Game(players);
-    this.repo.add(this.game);
-
-    const parsedPlayersData = this.game.playersData
-      .entries()
-      .map(([idPlayer, { player }]) => ({ idPlayer, player }));
-
-    return {
-      idGame: this.game.id,
-      players: parsedPlayersData
-    };
-  }
-
-  joinGame(gameId: string) {
-    this.game = this.repo.getById(gameId);
-  }
-
-  addShips({ indexPlayer, ships, gameId }: ClientAddShipsData) {
-    this.joinGame(gameId.toString());
-
-    const playerGameData = this.game!.playersData.get(indexPlayer.toString());
+    const playerGameData = game.playersData.get(indexPlayer.toString());
     if (!playerGameData) {
       throw new Error("this player isn't in game");
     }
 
     playerGameData.ships = ships;
     playerGameData.shipsMap = createShipsMap(ships);
+    return game;
   }
 
-  turn() {
-    if (!this.game?.isStarted) {
-      throw new Error("Game didn't started");
+  startGame(game: Game) {
+    const { playersData } = game;
+    if (playersData.size < 2) {
+      throw new Error("Game isn't full");
     }
 
-    return {
-      players: this.game.playersData
-        .values()
-        .map((playerData) => playerData.player),
-      playerMoveId: this.game.moverId
-    };
-  }
+    const isGameReady = playersData.values().every(({ ships }) => {
+      return ships !== null;
+    });
 
-  startGame() {
-    if (this.readyForStart()) {
-      this.game!.isStarted = true;
-      return [...this.game!.playersData.entries()];
+    if (!isGameReady) {
+      return null;
     }
 
-    return null;
-  }
+    game.isStarted = true;
 
-  readyForStart() {
-    return (
-      this.game?.playersData.values().every(({ ships }) => ships !== null) ||
-      false
+    return [...game.playersData.entries()].map(
+      ([playerId, { player, ships }]) => ({
+        player,
+        ships,
+        playerId
+      })
     );
   }
 
-  private checkTurn(playerId: string) {
-    if (!(this.game!.moverId === playerId)) {
+  private checkTurn(game: Game, playerId: string) {
+    if (!(game.moverId === playerId)) {
       throw new Error(`${playerId} not allow to move`);
     }
   }
 
-  private getPlayersDataEntries() {
-    if (!this.game) {
-      throw new Error("Game didn't initialize");
-    }
-
-    return [...this.game.playersData.entries()];
-  }
-
-  private getEnemyData(playerId: string) {
-    const playersData = this.getPlayersDataEntries();
+  private getEnemyData(game: Game, playerId: string) {
+    const playersData = [...game.playersData.entries()];
 
     return playersData.filter(([id]) => id !== playerId)[0];
   }
 
-  private getPlayerData(playerId: string) {
-    const playersData = this.getPlayersDataEntries();
+  private getPlayerData(game: Game, playerId: string) {
+    const playersData = [...game.playersData.entries()];
 
     return playersData.filter(([id]) => id === playerId)[0];
   }
@@ -172,11 +128,11 @@ export class GameService {
     return { status: "miss", aroundCoords: [] };
   }
 
-  private getRandomCoord(): Coords {
+  private getRandomCoord(game: Game): Coords {
     const x = randomNum(0, 9);
     const y = randomNum(0, 9);
     const coord = createCoordKey({ x, y });
-    const checkNewCoord = this.game!.moves.every((move) => {
+    const checkNewCoord = game.moves.every((move) => {
       const moveCoord = createCoordKey({
         x: move.attackData.x,
         y: move.attackData.y
@@ -184,7 +140,7 @@ export class GameService {
       return coord !== moveCoord;
     });
     if (!checkNewCoord) {
-      return this.getRandomCoord();
+      return this.getRandomCoord(game);
     }
     return { x, y };
   }
@@ -196,36 +152,37 @@ export class GameService {
     });
   }
 
-  closeGame(winnerId: string) {
-    if (!this.game) {
-      throw new Error("Game didn't initialize");
-    }
-
-    const { player } = this.game.playersData.get(winnerId)!;
+  finishGame(game: Game, winnerId: string) {
+    const { player } = game.playersData.get(winnerId)!;
     player.winsCount += 1;
-    this.game.winnerId = winnerId;
+    game.winnerId = winnerId;
 
-    console.log(this.game.id, "game is closed");
+    console.log(game.id, "game is closed");
+  }
+
+  forceCloseGame(game: Game, leaverId: string) {
+    const [winnerId] = this.getEnemyData(game, leaverId);
+    this.finishGame(game, winnerId);
   }
 
   attack(data: ClientAttackData) {
-    if (!this.game) {
-      throw new Error("game didn't initialize");
-    }
-
-    const { indexPlayer } = data;
-    this.checkTurn(indexPlayer.toString());
+    const { indexPlayer, gameId } = data;
+    const game = this.repo.getById(gameId.toString());
+    this.checkTurn(game, indexPlayer.toString());
 
     let { x, y } = data;
     if (x === undefined && y === undefined) {
-      const { x: newXcoord, y: newYcoord } = this.getRandomCoord();
+      const { x: newXcoord, y: newYcoord } = this.getRandomCoord(game);
       x = newXcoord;
       y = newYcoord;
     }
 
-    const [idPlayer, { player }] = this.getPlayerData(indexPlayer.toString());
+    const [idPlayer, { player }] = this.getPlayerData(
+      game,
+      indexPlayer.toString()
+    );
     const [indexEnemyPlayer, { player: enemy, shipsMap: enemyShips }] =
-      this.getEnemyData(indexPlayer.toString());
+      this.getEnemyData(game, indexPlayer.toString());
 
     const attackStatus = this.getAttackStatus(enemyShips!, {
       x,
@@ -235,22 +192,23 @@ export class GameService {
       attackStatus.status === "killed" && this.checkGameOver(enemyShips!);
 
     if (isGameOver) {
-      this.closeGame(idPlayer);
+      this.finishGame(game, idPlayer);
     }
 
     const attackResult = {
       attackStatus,
       players: [player, enemy],
       attackCoords: { x, y },
+      game,
       isGameOver
     };
 
-    this.game!.moves.push({ attackData: { ...data, x, y }, attackResult });
+    game.moves.push({ attackData: { ...data, x, y }, attackResult });
 
     if (attackStatus.status === "miss") {
-      this.game!.moverId = indexEnemyPlayer;
+      game.moverId = indexEnemyPlayer;
     } else {
-      this.game!.moverId = idPlayer;
+      game.moverId = idPlayer;
     }
 
     return attackResult;

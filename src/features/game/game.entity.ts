@@ -1,8 +1,8 @@
 import { generateId } from "@/utils/generate-id";
-import { Client } from "@/features/client/client.entity";
 import { ClientAttackData, ClientShipData } from "@/ws-server/ws-server.type";
 import { randomNum } from "@/utils/random-num";
 import { ShipsData } from "@/features/game/game.type";
+import { Player } from "@/features/player/player.entity";
 
 type Move = {
   attackData: ClientAttackData;
@@ -10,11 +10,11 @@ type Move = {
 };
 
 type PlayerData = {
-  player: Player;
+  player: GameMember;
   ships: ClientShipData[] | null;
   shipsMap: ShipsData | null;
 };
-export type Player = Client;
+export type GameMember = Player;
 
 export class Game {
   public readonly id = generateId();
@@ -24,8 +24,8 @@ export class Game {
   public moverId: string;
   public winnerId: string | null = null;
 
-  constructor(players: Player[]) {
-    players.forEach((player: Player) => {
+  constructor(players: GameMember[]) {
+    players.forEach((player: GameMember) => {
       this.playersData.set(player.id, {
         player,
         ships: null,
@@ -33,6 +33,8 @@ export class Game {
       });
     });
 
-    this.moverId = [...this.playersData.keys()][randomNum(0, 1)];
+    const playersId = [...this.playersData.keys()];
+    const playersCount = playersId.length - 1;
+    this.moverId = playersId[randomNum(0, playersCount)];
   }
 }
