@@ -1,12 +1,7 @@
 import { Client } from "@/features/client/client.entity";
 import { WebSocket } from "ws";
-import {
-  IClientService,
-  RegistrationData
-} from "@/features/client/client.type";
+import { RegistrationData } from "@/features/client/client.type";
 import { RoomService } from "@/features/room/room.service";
-import { validateNameAvailability } from "@/utils/validate-auth-data";
-import { clientRepo } from "@/features/client/client.repository";
 import {
   ClientAddShipsData,
   ClientAttackData
@@ -14,47 +9,108 @@ import {
 import { GameService } from "@/features/game/game.service";
 import {
   createResponse,
+  getAttackTemplate,
+  getCreateGameDataTemplate,
+  getFinishTemplate,
+  getRegDataTemplate,
+  getStartGameDataTemplate,
+  getTurnTemplate,
   getUpdateRoomDataTemplate,
   getUpdateWinnersDataTemplate
-} from "@/ws-server/helpers/response-templates";
+} from "@/utils/response-templates";
 import { ServerResponseType } from "@/ws-server/ws-server.enum";
+import { PlayerService } from "@/features/player/player.service";
+import { Room } from "@/features/room/room.entity";
+import { Game } from "@/features/game/game.entity";
+import { Player } from "@/features/player/player.entity";
+import { Bot } from "@/features/game/bot.service";
 
-// client service => room service => game service
-
-export class ClientService implements IClientService {
+export class ClientService {
   private readonly client: Client;
-  private readonly repo = clientRepo;
   private readonly roomService = new RoomService();
   private readonly gameService = new GameService();
+  private readonly playerService = new PlayerService();
 
   constructor(webSocket: WebSocket) {
     this.client = new Client(webSocket);
   }
 
-  getAllClients(): Client[] {
-    return this.repo.getAll();
+  disconnect() {
+    const { player, game, room } = this.client;
+
+    if (!player) {
+      return console.log("unauthorized client has been disconnect");
+    }
+
+    this.playerService.deletePlayer(player);
+
+    if (game) {
+      this.gameService.forceCloseGame(game, player.id);
+      this.finish(game);
+    }
+
+    if (room) {
+      this.roomService.destroy(room);
+      this.updateRoom();
+    }
+
+    console.log(`client ${this.client.player?.name} has been deactivated`);
   }
 
-  getAllWinners(): Client[] {
-    return this.repo.getAllWinners();
+  reg({ name, password }: RegistrationData): void {
+    const regData = getRegDataTemplate();
+    try {
+      const player = this.playerService.createPlayer(
+        name,
+        password,
+        this.client.webSocket
+      );
+      this.client.player = player;
+      regData.name = player.name;
+    } catch (error) {
+      regData.error = true;
+      if (error instanceof Error) {
+        regData.errorText = error.message;
+      } else {
+        console.error(error);
+        regData.errorText = "unknown error";
+      }
+    }
+    const response = createResponse(
+      ServerResponseType.REGISTRATION,
+      JSON.stringify(regData)
+    );
+
+    this.client.webSocket.send(JSON.stringify(response));
+    this.updateRoom();
+    this.updateWinners();
   }
 
-  getAllAvailableRooms() {
-    return this.roomService.getAllAvailable();
+  private updateRoom() {
+    const availableRooms = this.roomService.getAllAvailable();
+
+    const updateDataList = availableRooms.map(
+      ({ id, host: { name, id: hostId } }) => {
+        const updateRoomData = getUpdateRoomDataTemplate();
+        updateRoomData.roomId = id;
+        updateRoomData.roomUsers[0].index = hostId;
+        updateRoomData.roomUsers[0].name = name;
+        return updateRoomData;
+      }
+    );
+
+    const response = createResponse(
+      ServerResponseType.UPDATE_ROOM,
+      JSON.stringify(updateDataList)
+    );
+
+    this.playerService.getAllPlayers().forEach(({ webSocket }) => {
+      webSocket.send(JSON.stringify(response));
+    });
   }
 
-  finish() {
-    const gameResult = this.gameService.getGameResult();
-    this.gameService.unlink();
-    this.roomService.destroy();
-    return gameResult;
-  }
-
-  exit() {
-    this.roomService.destroy();
-    this.repo.delete(this.client);
-    this.gameService.unlink(this.client.id);
-    const allWinners = this.getAllWinners();
+  private updateWinners() {
+    const allWinners = this.playerService.getAllWinners();
 
     const winnersDataList = allWinners.map(({ winsCount, name }) => {
       const updateWinnersData = getUpdateWinnersDataTemplate();
@@ -68,87 +124,176 @@ export class ClientService implements IClientService {
       JSON.stringify(winnersDataList)
     );
 
-    this.getAllClients().forEach(({ webSocket }) =>
-      webSocket.send(JSON.stringify(response))
-    );
-
-    const availableRooms = this.getAllAvailableRooms();
-
-    const updateDataList = availableRooms.map(
-      ({ id, host: { name, id: hostId } }) => {
-        const updateRoomData = getUpdateRoomDataTemplate();
-        updateRoomData.roomId = id;
-        updateRoomData.roomUsers[0].index = hostId;
-        updateRoomData.roomUsers[0].name = name;
-        return updateRoomData;
-      }
-    );
-
-    const response2 = createResponse(
-      ServerResponseType.UPDATE_ROOM,
-      JSON.stringify(updateDataList)
-    );
-
-    this.getAllClients().forEach(({ webSocket }) => {
-      webSocket.send(JSON.stringify(response2));
-    });
-    console.log(`client ${this.client.name} has been deactivated`);
-  }
-
-  turn() {
-    return this.gameService.turn();
-  }
-
-  authorization({ name, password }: RegistrationData): void {
-    // validateNameSpelling(name);
-    validateNameAvailability(name, this.getAllClients());
-    // validatePasswordSpelling(password);
-
-    this.client.name = name;
-    this.client.password = password;
-    this.client.isAuth = true;
-    this.repo.add(this.client);
+    this.playerService
+      .getAllPlayers()
+      .forEach(({ webSocket }) => webSocket.send(JSON.stringify(response)));
   }
 
   createRoom() {
-    return this.roomService.createRoom(this.client);
-  }
-
-  enterToRoom(roomId: string) {
-    if (this.roomService.getRoom()?.id === roomId) {
-      throw new Error(`client ${this.client.name} already in this room`);
+    if (this.client.room) {
+      this.roomService.destroy(this.client.room);
     }
 
-    this.roomService.joinRoom(roomId, this.client);
+    if (!this.client.player) {
+      throw new Error("client didn't auth");
+    }
+
+    this.client.room = this.roomService.createRoom(this.client.player);
+
+    this.updateRoom();
   }
 
-  createGame() {
-    const room = this.roomService.getRoom();
-    if (!room) throw new Error("this client isn't in room");
-    return this.gameService.createGame(room.members);
+  addUserToRoom({ indexRoom }: { indexRoom: string }) {
+    if (!this.client.player) {
+      throw new Error("client didn't auth");
+    }
+
+    if (this.client.room) {
+      this.roomService.destroy(this.client.room);
+    }
+
+    const room = this.roomService.addMemberInRoom(
+      indexRoom,
+      this.client.player
+    );
+
+    this.client.room = room;
+
+    this.updateRoom();
+    this.createGame(room);
+  }
+
+  private createGame(room: Room) {
+    const { members } = room;
+    if (members.length !== 2) {
+      throw new Error("room isn't full");
+    }
+
+    const game = this.gameService.createGame(members);
+    this.client.game = game;
+    members.forEach((member) => {
+      const createGameDataTemplate = getCreateGameDataTemplate();
+      createGameDataTemplate.idGame = game.id;
+      createGameDataTemplate.idPlayer = member.id;
+
+      const response = createResponse(
+        ServerResponseType.CREATE_GAME,
+        JSON.stringify(createGameDataTemplate)
+      );
+
+      member.webSocket.send(JSON.stringify(response));
+    });
   }
 
   addShips(shipsData: ClientAddShipsData) {
-    this.gameService.addShips(shipsData);
+    const game = this.gameService.addShips(shipsData);
+    this.client.game = game;
+    this.startGame(game);
   }
 
-  startGame() {
-    return this.gameService.startGame();
+  private startGame(game: Game) {
+    const gameMembersData = this.gameService.startGame(game);
+    if (!gameMembersData) {
+      return;
+    }
+    const startGameDataTemplate = getStartGameDataTemplate();
+
+    gameMembersData.forEach(({ ships, player, playerId }) => {
+      startGameDataTemplate.ships = ships!;
+      startGameDataTemplate.currentPlayerIndex = playerId;
+
+      const response = createResponse(
+        ServerResponseType.START_GAME,
+        JSON.stringify(startGameDataTemplate)
+      );
+
+      player.webSocket.send(JSON.stringify(response));
+    });
+
+    this.turn(game);
   }
 
-  handleAttack(data: ClientAttackData) {
-    return this.gameService.attack(data);
+  private turn(game: Game) {
+    const players = game.playersData
+      .values()
+      .map((playerData) => playerData.player);
+
+    const turnDataTemplate = getTurnTemplate();
+    turnDataTemplate.currentPlayer = game.moverId;
+
+    const response = createResponse(
+      ServerResponseType.TURN,
+      JSON.stringify(turnDataTemplate)
+    );
+
+    players.forEach((player) => {
+      player.webSocket.send(JSON.stringify(response));
+    });
   }
 
-  getWs(): WebSocket {
-    return this.client.webSocket;
+  attack(data: ClientAttackData) {
+    const {
+      attackStatus,
+      players,
+      attackCoords: { x, y },
+      isGameOver,
+      game
+    } = this.gameService.attack(data);
+
+    const attackTemplate = getAttackTemplate();
+    attackTemplate.position.x = x;
+    attackTemplate.position.y = y;
+    attackTemplate.status = attackStatus.status;
+    attackTemplate.currentPlayer = data.indexPlayer.toString();
+
+    const response = createResponse(
+      ServerResponseType.ATTACK,
+      JSON.stringify(attackTemplate)
+    );
+
+    players.forEach(({ webSocket }) => {
+      webSocket.send(JSON.stringify(response));
+    });
+
+    attackStatus.aroundCoords.forEach(({ x, y }) => {
+      const attackTemplate = getAttackTemplate();
+      attackTemplate.position.x = x;
+      attackTemplate.position.y = y;
+      attackTemplate.status = "miss";
+      attackTemplate.currentPlayer = data.indexPlayer.toString();
+
+      const response = createResponse(
+        ServerResponseType.ATTACK,
+        JSON.stringify(attackTemplate)
+      );
+
+      players.forEach(({ webSocket }) => {
+        webSocket.send(JSON.stringify(response));
+      });
+    });
+
+    if (isGameOver) {
+      this.finish(game);
+    } else {
+      this.turn(game);
+    }
   }
 
-  getName(): string {
-    return this.client.name;
-  }
+  private finish(game: Game) {
+    const { players, winnerId } = this.gameService.getGameResult(game);
 
-  getId(): string {
-    return this.client.id;
+    const finishTemplate = getFinishTemplate();
+    finishTemplate.winPlayer = winnerId;
+
+    const response = createResponse(
+      ServerResponseType.FINISH,
+      JSON.stringify(finishTemplate)
+    );
+
+    players.forEach(({ webSocket }) => {
+      webSocket.send(JSON.stringify(response));
+    });
+
+    this.updateWinners();
   }
 }
