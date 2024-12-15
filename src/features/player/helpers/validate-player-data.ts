@@ -1,4 +1,4 @@
-import { Client } from "@/features/client/client.entity";
+import { Player } from "@/features/player/player.entity";
 
 const nameRegex = /^[A-Z][a-zA-Z0-9]*$/;
 const passwordRegex = /^(?=.*[A-Z])(?=.*\d)[A-Za-z\d]+$/;
@@ -19,9 +19,9 @@ export function validatePasswordSpelling(password: string) {
   }
 }
 
-export function validateNameAvailability(name: string, clientsList: Client[]) {
-  clientsList.forEach((client) => {
-    if (client.name === name) {
+export function validateNameAvailability(name: string, players: Player[]) {
+  players.forEach((player) => {
+    if (player.name === name) {
       throw new Error("name already exists");
     }
   });
