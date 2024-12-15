@@ -1,8 +1,7 @@
 import { generateId } from "@/utils/generate-id";
-import { Client } from "@/features/client/client.entity";
+import { Player } from "@/features/player/player.entity";
 
-export type RoomMember = Client;
-const ROOM_LIMIT = 2;
+export type RoomMember = Player;
 
 export class Room {
   public readonly id = generateId();
@@ -12,9 +11,5 @@ export class Room {
   constructor(member: RoomMember) {
     this.host = member;
     this.members.push(member);
-  }
-
-  isFull() {
-    return this.members.length >= ROOM_LIMIT;
   }
 }

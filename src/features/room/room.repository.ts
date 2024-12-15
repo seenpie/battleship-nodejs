@@ -22,15 +22,6 @@ export class RoomRepository {
     return room;
   }
 
-  getAllAvailable() {
-    const allRooms = this.getAll();
-    return allRooms.reduce<Room[]>((acc, room) => {
-      if (!room.isFull()) {
-        acc.push(room);
-      }
-      return acc;
-    }, []);
-  }
   add(room: Room) {
     this.dbService.create(room);
   }
