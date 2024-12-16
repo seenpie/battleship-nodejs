@@ -1,4 +1,4 @@
-import { Game, GameMember } from "@/features/game/game.entity";
+import { Game, GameMember, Move } from "@/features/game/game.entity";
 import {
   ClientAddShipsData,
   ClientAttackData
@@ -6,8 +6,11 @@ import {
 import { gameRepository } from "@/features/game/game.repository";
 import { createShipsMap } from "@/features/game/helpers/create-ships-map";
 import { Coords, ShipsData } from "@/features/game/game.type";
-import { createCoordKey } from "@/features/game/helpers/create-coord-key";
-import { randomNum } from "@/utils/random-num";
+import {
+  createCoord,
+  getRandomCoord
+} from "@/features/game/helpers/create-coord";
+import { Player } from "@/features/player/player.entity";
 
 export class GameService {
   private repo = gameRepository;
@@ -27,8 +30,8 @@ export class GameService {
     };
   }
 
-  createGame(players: GameMember[]): Game {
-    const newGame = new Game(players);
+  createGame(players: GameMember[], isSoloGame = false): Game {
+    const newGame = new Game(players, isSoloGame);
     this.repo.add(newGame);
     return newGame;
   }
@@ -100,7 +103,7 @@ export class GameService {
       for (const coord of coords) {
         const { isKilled, aroundCoords, shipCoords } = coord;
 
-        const key = createCoordKey({ x, y });
+        const key = createCoord({ x, y });
         const isShot = shipCoords.get(key);
         // console.log(shipCoords);
         // console.log(key);
@@ -128,23 +131,6 @@ export class GameService {
     return { status: "miss", aroundCoords: [] };
   }
 
-  private getRandomCoord(game: Game): Coords {
-    const x = randomNum(0, 9);
-    const y = randomNum(0, 9);
-    const coord = createCoordKey({ x, y });
-    const checkNewCoord = game.moves.every((move) => {
-      const moveCoord = createCoordKey({
-        x: move.attackData.x,
-        y: move.attackData.y
-      });
-      return coord !== moveCoord;
-    });
-    if (!checkNewCoord) {
-      return this.getRandomCoord(game);
-    }
-    return { x, y };
-  }
-
   private checkGameOver(ships: ShipsData) {
     const coordsMaps = [...ships.values()].flat();
     return coordsMaps.every((coord) => {
@@ -154,7 +140,11 @@ export class GameService {
 
   finishGame(game: Game, winnerId: string) {
     const { player } = game.playersData.get(winnerId)!;
-    player.winsCount += 1;
+    if (!game.isSoloGame) {
+      if (player instanceof Player) {
+        player.winsCount += 1;
+      }
+    }
     game.winnerId = winnerId;
 
     console.log(game.id, "game is closed");
@@ -165,29 +155,41 @@ export class GameService {
     this.finishGame(game, winnerId);
   }
 
+  private getAttackCoords(
+    moves: Move[],
+    x: number | undefined,
+    y: number | undefined
+  ): { x: number; y: number } {
+    let attackXcoord: number;
+    let attackYcoord: number;
+
+    if (x === undefined && y === undefined) {
+      const { x: newXcoord, y: newYcoord } = getRandomCoord(moves);
+      attackXcoord = newXcoord;
+      attackYcoord = newYcoord;
+    } else {
+      attackXcoord = x!;
+      attackYcoord = y!;
+    }
+
+    return { x: attackXcoord, y: attackYcoord };
+  }
+
   attack(data: ClientAttackData) {
-    const { indexPlayer, gameId } = data;
+    const { indexPlayer, gameId, x, y } = data;
     const game = this.repo.getById(gameId.toString());
     this.checkTurn(game, indexPlayer.toString());
 
-    let { x, y } = data;
-    if (x === undefined && y === undefined) {
-      const { x: newXcoord, y: newYcoord } = this.getRandomCoord(game);
-      x = newXcoord;
-      y = newYcoord;
-    }
-
-    const [idPlayer, { player }] = this.getPlayerData(
+    const [idPlayer, { player, moves }] = this.getPlayerData(
       game,
       indexPlayer.toString()
     );
     const [indexEnemyPlayer, { player: enemy, shipsMap: enemyShips }] =
       this.getEnemyData(game, indexPlayer.toString());
 
-    const attackStatus = this.getAttackStatus(enemyShips!, {
-      x,
-      y
-    });
+    const attackCoords = this.getAttackCoords(moves, x, y);
+
+    const attackStatus = this.getAttackStatus(enemyShips!, attackCoords);
     const isGameOver =
       attackStatus.status === "killed" && this.checkGameOver(enemyShips!);
 
@@ -198,12 +200,12 @@ export class GameService {
     const attackResult = {
       attackStatus,
       players: [player, enemy],
-      attackCoords: { x, y },
+      attackCoords,
       game,
       isGameOver
     };
 
-    game.moves.push({ attackData: { ...data, x, y }, attackResult });
+    moves.push({ attackData: { ...data, ...attackCoords }, attackResult });
 
     if (attackStatus.status === "miss") {
       game.moverId = indexEnemyPlayer;

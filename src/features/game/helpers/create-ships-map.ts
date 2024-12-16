@@ -1,6 +1,6 @@
 import { ClientShipData } from "@/ws-server/ws-server.type";
 import { Coords, CoordsMap, ShipsData } from "@/features/game/game.type";
-import { createCoordKey } from "@/features/game/helpers/create-coord-key";
+import { createCoord } from "@/features/game/helpers/create-coord";
 
 function getAroundCoords({
   x,
@@ -75,11 +75,11 @@ export function createShipsMap(ships: ClientShipData[]): ShipsData {
       const x = direction ? shipX : shipX + i;
       const y = direction ? shipY + i : shipY;
       console.log(x, y);
-      coords.shipCoords.set(createCoordKey({ x, y }), { x, y });
+      coords.shipCoords.set(createCoord({ x, y }), { x, y });
 
       getAroundCoords({ x, y, length, direction, index: i }).forEach(
         ({ x, y }) => {
-          coords.aroundCoords.set(createCoordKey({ x, y }), { x, y });
+          coords.aroundCoords.set(createCoord({ x, y }), { x, y });
         }
       );
     }

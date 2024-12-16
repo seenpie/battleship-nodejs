@@ -23,7 +23,11 @@ import { PlayerService } from "@/features/player/player.service";
 import { Room } from "@/features/room/room.entity";
 import { Game } from "@/features/game/game.entity";
 import { Player } from "@/features/player/player.entity";
-import { Bot } from "@/features/game/bot.service";
+import {
+  BOT_MOVE_DELAY,
+  createBot,
+  getBotShipsData
+} from "@/features/client/helpers/bot";
 
 export class ClientService {
   private readonly client: Client;
@@ -41,8 +45,6 @@ export class ClientService {
     if (!player) {
       return console.log("unauthorized client has been disconnect");
     }
-
-    this.playerService.deletePlayer(player);
 
     if (game) {
       this.gameService.forceCloseGame(game, player.id);
@@ -144,18 +146,20 @@ export class ClientService {
   }
 
   addUserToRoom({ indexRoom }: { indexRoom: string }) {
-    if (!this.client.player) {
+    const { player, room: clientRoom } = this.client;
+    if (!player) {
       throw new Error("client didn't auth");
     }
 
-    if (this.client.room) {
-      this.roomService.destroy(this.client.room);
+    if (clientRoom?.host.id === player.id) {
+      throw new Error("client already in this room");
     }
 
-    const room = this.roomService.addMemberInRoom(
-      indexRoom,
-      this.client.player
-    );
+    if (clientRoom) {
+      this.roomService.destroy(clientRoom);
+    }
+
+    const room = this.roomService.addMemberInRoom(indexRoom, player);
 
     this.client.room = room;
 
@@ -207,7 +211,9 @@ export class ClientService {
         JSON.stringify(startGameDataTemplate)
       );
 
-      player.webSocket.send(JSON.stringify(response));
+      if (player instanceof Player) {
+        player.webSocket.send(JSON.stringify(response));
+      }
     });
 
     this.turn(game);
@@ -226,9 +232,26 @@ export class ClientService {
       JSON.stringify(turnDataTemplate)
     );
 
+    let botId = "";
+
     players.forEach((player) => {
-      player.webSocket.send(JSON.stringify(response));
+      if (player instanceof Player) {
+        player.webSocket.send(JSON.stringify(response));
+      } else {
+        botId = player.id;
+      }
     });
+
+    if (botId === game.moverId) {
+      setTimeout(() => {
+        this.attack({
+          indexPlayer: botId,
+          gameId: game.id,
+          x: undefined,
+          y: undefined
+        });
+      }, BOT_MOVE_DELAY);
+    }
   }
 
   attack(data: ClientAttackData) {
@@ -251,8 +274,10 @@ export class ClientService {
       JSON.stringify(attackTemplate)
     );
 
-    players.forEach(({ webSocket }) => {
-      webSocket.send(JSON.stringify(response));
+    players.forEach((player) => {
+      if (player instanceof Player) {
+        player.webSocket.send(JSON.stringify(response));
+      }
     });
 
     attackStatus.aroundCoords.forEach(({ x, y }) => {
@@ -267,8 +292,10 @@ export class ClientService {
         JSON.stringify(attackTemplate)
       );
 
-      players.forEach(({ webSocket }) => {
-        webSocket.send(JSON.stringify(response));
+      players.forEach((player) => {
+        if (player instanceof Player) {
+          player.webSocket.send(JSON.stringify(response));
+        }
       });
     });
 
@@ -290,10 +317,52 @@ export class ClientService {
       JSON.stringify(finishTemplate)
     );
 
-    players.forEach(({ webSocket }) => {
-      webSocket.send(JSON.stringify(response));
+    players.forEach((player) => {
+      if (player instanceof Player) {
+        player.webSocket.send(JSON.stringify(response));
+      }
     });
 
     this.updateWinners();
+  }
+
+  private createGameWithBot(player: Player) {
+    const bot = createBot();
+    const game = this.gameService.createGame([player, bot], true);
+
+    this.client.game = game;
+    const createGameDataTemplate = getCreateGameDataTemplate();
+    createGameDataTemplate.idGame = game.id;
+    createGameDataTemplate.idPlayer = player.id;
+
+    const response = createResponse(
+      ServerResponseType.CREATE_GAME,
+      JSON.stringify(createGameDataTemplate)
+    );
+
+    player.webSocket.send(JSON.stringify(response));
+
+    console.log(bot.id, "bot id");
+
+    if (this.client.room) {
+      this.roomService.destroy(this.client.room);
+      this.updateRoom();
+    }
+
+    this.addShips({
+      gameId: game.id,
+      ships: JSON.parse(getBotShipsData()),
+      indexPlayer: bot.id
+    });
+    this.startGame(game);
+  }
+
+  singlePlay() {
+    const { player } = this.client;
+    if (!player) {
+      throw new Error("client doesn't have player!");
+    }
+
+    this.createGameWithBot(player);
   }
 }
