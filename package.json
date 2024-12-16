@@ -1,21 +1,41 @@
 {
-    "name": "ws_task",
-    "version": "1.0.0",
-    "description": "Template for the WebSocket remote control task",
-    "main": "index.js",
-    "type": "module",
-    "scripts": {
-        "start": "node ./index.js",
-        "start:dev": "nodemon ./index.js",
-        "test": "echo \"Error: no test specified\" && exit 1"
-    },
-    "author": "Andrei Auchynnikau",
-    "keywords": [],
-    "license": "ISC",
-    "devDependencies": {
-        "nodemon": "^2.0.16"
-    },
-    "dependencies": {
-        "ws": "^8.8.0"
-    }
+  "name": "nodejs-battleship",
+  "version": "1.0.0",
+  "description": "rs_school nodejs-battleship task",
+  "type": "module",
+  "scripts": {
+    "build": "webpack --config webpack.config.mjs",
+    "start:dev": "tsx watch --env-file=.env src/index.ts",
+    "start:prod": "npm run build && node --env-file=.env dist/bundle.js",
+    "lint": "eslint src",
+    "lint:fix": "eslint --fix src",
+    "format": "prettier --check src",
+    "format:fix": "prettier --write src"
+  },
+  "author": "seenpie",
+  "keywords": [],
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/compat": "^1.2.1",
+    "@eslint/eslintrc": "^3.1.0",
+    "@eslint/js": "^9.13.0",
+    "@types/node": "^22.7.8",
+    "@types/ws": "^8.5.12",
+    "@typescript-eslint/eslint-plugin": "^8.11.0",
+    "@typescript-eslint/parser": "^8.11.0",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.3",
+    "eslint-plugin-import-x": "^4.3.1",
+    "eslint-plugin-prettier": "^5.2.1",
+    "prettier": "^3.3.3",
+    "ts-loader": "^9.5.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "webpack": "^5.95.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "ws": "^8.8.0"
+  }
 }
