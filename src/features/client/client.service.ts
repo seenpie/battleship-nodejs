@@ -151,12 +151,12 @@ export class ClientService {
       throw new Error("client didn't auth");
     }
 
-    if (clientRoom?.host.id === player.id) {
+    if (clientRoom?.id === indexRoom) {
       throw new Error("client already in this room");
     }
 
     if (clientRoom) {
-      this.roomService.destroy(clientRoom);
+      this.roomService.destroy(clientRoom!);
     }
 
     const room = this.roomService.addMemberInRoom(indexRoom, player);
