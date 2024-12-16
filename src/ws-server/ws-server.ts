@@ -8,6 +8,9 @@ import {
 import { ClientRequestType } from "@/ws-server/ws-server.enum";
 import { logError } from "@/ws-server/helpers/log-error";
 import { RegistrationData } from "@/features/client/client.type";
+import { RoomService } from "@/features/room/room.service";
+import { GameService } from "@/features/game/game.service";
+import { PlayerService } from "@/features/player/player.service";
 
 export class WsServer {
   private readonly server: WebSocketServer;
@@ -18,7 +21,12 @@ export class WsServer {
 
   private connection(): void {
     this.server.on("connection", (ws) => {
-      const clientService = new ClientService(ws);
+      const clientService = new ClientService(
+        ws,
+        new RoomService(),
+        new GameService(),
+        new PlayerService()
+      );
       ws.on("error", console.error);
       ws.on("message", (data) => this.onMessage(data, clientService));
       ws.on("close", () => this.onClose(clientService));
@@ -31,7 +39,6 @@ export class WsServer {
 
   private onMessage(clientData: RawData, clientService: ClientService): void {
     const parsedClientData = JSON.parse(clientData.toString()) as ClientRequest;
-    console.log(parsedClientData, "data");
     const { type, data } = parsedClientData;
 
     try {

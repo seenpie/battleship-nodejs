@@ -105,9 +105,6 @@ export class GameService {
 
         const key = createCoord({ x, y });
         const isShot = shipCoords.get(key);
-        // console.log(shipCoords);
-        // console.log(key);
-        // console.log(isShot);
 
         if (isShot) {
           if (isKilled) {
@@ -146,8 +143,6 @@ export class GameService {
       }
     }
     game.winnerId = winnerId;
-
-    console.log(game.id, "game is closed");
   }
 
   forceCloseGame(game: Game, leaverId: string) {

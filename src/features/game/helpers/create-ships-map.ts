@@ -74,7 +74,6 @@ export function createShipsMap(ships: ClientShipData[]): ShipsData {
     for (let i = 0; i < length; i++) {
       const x = direction ? shipX : shipX + i;
       const y = direction ? shipY + i : shipY;
-      console.log(x, y);
       coords.shipCoords.set(createCoord({ x, y }), { x, y });
 
       getAroundCoords({ x, y, length, direction, index: i }).forEach(
@@ -83,7 +82,6 @@ export function createShipsMap(ships: ClientShipData[]): ShipsData {
         }
       );
     }
-    console.log(coords);
     if (!map.has(type)) {
       map.set(type, [coords]);
     } else {
@@ -91,6 +89,5 @@ export function createShipsMap(ships: ClientShipData[]): ShipsData {
     }
   }
 
-  console.log(map.get("huge"));
   return map;
 }

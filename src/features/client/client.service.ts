@@ -31,11 +31,13 @@ import {
 
 export class ClientService {
   private readonly client: Client;
-  private readonly roomService = new RoomService();
-  private readonly gameService = new GameService();
-  private readonly playerService = new PlayerService();
 
-  constructor(webSocket: WebSocket) {
+  constructor(
+    webSocket: WebSocket,
+    private readonly roomService: RoomService,
+    private readonly gameService: GameService,
+    private readonly playerService: PlayerService
+  ) {
     this.client = new Client(webSocket);
   }
 
@@ -132,15 +134,16 @@ export class ClientService {
   }
 
   createRoom() {
-    if (this.client.room) {
-      this.roomService.destroy(this.client.room);
+    const { room, player } = this.client;
+    if (room) {
+      this.roomService.destroy(room);
     }
 
-    if (!this.client.player) {
+    if (!player) {
       throw new Error("client didn't auth");
     }
 
-    this.client.room = this.roomService.createRoom(this.client.player);
+    this.client.room = this.roomService.createRoom(player);
 
     this.updateRoom();
   }
@@ -274,10 +277,10 @@ export class ClientService {
       JSON.stringify(attackTemplate)
     );
 
-    players.forEach((player) => {
-      if (player instanceof Player) {
-        player.webSocket.send(JSON.stringify(response));
-      }
+    const realPlayers = players.filter((player) => player instanceof Player);
+
+    realPlayers.forEach((player) => {
+      player.webSocket.send(JSON.stringify(response));
     });
 
     attackStatus.aroundCoords.forEach(({ x, y }) => {
@@ -292,10 +295,8 @@ export class ClientService {
         JSON.stringify(attackTemplate)
       );
 
-      players.forEach((player) => {
-        if (player instanceof Player) {
-          player.webSocket.send(JSON.stringify(response));
-        }
+      realPlayers.forEach((player) => {
+        player.webSocket.send(JSON.stringify(response));
       });
     });
 
@@ -317,10 +318,10 @@ export class ClientService {
       JSON.stringify(finishTemplate)
     );
 
-    players.forEach((player) => {
-      if (player instanceof Player) {
-        player.webSocket.send(JSON.stringify(response));
-      }
+    const realPlayers = players.filter((player) => player instanceof Player);
+
+    realPlayers.forEach((player) => {
+      player.webSocket.send(JSON.stringify(response));
     });
 
     this.updateWinners();
@@ -342,10 +343,9 @@ export class ClientService {
 
     player.webSocket.send(JSON.stringify(response));
 
-    console.log(bot.id, "bot id");
-
-    if (this.client.room) {
-      this.roomService.destroy(this.client.room);
+    const { room } = this.client;
+    if (room) {
+      this.roomService.destroy(room);
       this.updateRoom();
     }
 
