@@ -24,7 +24,7 @@ export type ClientAddShipsData = {
 
 export type ClientAttackData = {
   gameId: number | string;
-  x: number;
-  y: number;
+  x: number | undefined;
+  y: number | undefined;
   indexPlayer: number | string;
 };
