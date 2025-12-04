@@ -6,7 +6,7 @@ const passwordRegex = /^(?=.*[A-Z])(?=.*\d)[A-Za-z\d]+$/;
 export function validateNameSpelling(name: string) {
   if (!nameRegex.test(name)) {
     throw new Error(
-      "name should be started in uppercase and not contain spaces and allow only latin"
+      "name should start with an uppercase letter and contain only Latin alphanumeric characters"
     );
   }
 }
