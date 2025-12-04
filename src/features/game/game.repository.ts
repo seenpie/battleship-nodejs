@@ -10,7 +10,7 @@ export class GameRepository {
 
   getById(id: string): Game {
     const game = this.dbService.findById(id);
-    if (!game) throw new Error("room not found");
+    if (!game) throw new Error("game not found");
     return game;
   }
 
