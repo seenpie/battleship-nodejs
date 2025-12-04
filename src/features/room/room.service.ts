@@ -22,7 +22,7 @@ export class RoomService {
   addMemberInRoom(roomId: string, member: RoomMember): Room {
     const room = this.repo.getById(roomId);
     if (!room) {
-      throw new Error("room didn't exist");
+      throw new Error("room doesn't exist");
     }
     room.members.push(member);
     return room;
