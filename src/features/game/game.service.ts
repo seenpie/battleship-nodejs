@@ -182,11 +182,15 @@ export class GameService {
     const [indexEnemyPlayer, { player: enemy, shipsMap: enemyShips }] =
       this.getEnemyData(game, indexPlayer.toString());
 
+    if (!enemyShips) {
+      throw new Error("Enemy ships are not initialized.");
+    }
+
     const attackCoords = this.getAttackCoords(moves, x, y);
 
-    const attackStatus = this.getAttackStatus(enemyShips!, attackCoords);
+    const attackStatus = this.getAttackStatus(enemyShips, attackCoords);
     const isGameOver =
-      attackStatus.status === "killed" && this.checkGameOver(enemyShips!);
+      attackStatus.status === "killed" && this.checkGameOver(enemyShips);
 
     if (isGameOver) {
       this.finishGame(game, idPlayer);
