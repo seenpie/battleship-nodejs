@@ -17,7 +17,7 @@ export class GameService {
 
   getGameResult(game: Game) {
     if (!game.winnerId) {
-      throw new Error("Game did not ended");
+      throw new Error("Game has not ended");
     }
 
     const players = [...game.playersData.entries()].map(
