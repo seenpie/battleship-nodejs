@@ -13,7 +13,7 @@ export class DbService<T> implements IDatabaseService<T> {
 
   create(item: T) {
     const id = (item as { id: string }).id;
-    if (!id) throw new Error("not id in entity");
+    if (!id) throw new Error("no id in entity");
     this.storage.set(id, item);
   }
 
