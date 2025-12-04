@@ -14,7 +14,7 @@ export function validateNameSpelling(name: string) {
 export function validatePasswordSpelling(password: string) {
   if (!passwordRegex.test(password)) {
     throw new Error(
-      "password should contain at least one digit and uppercase letter and not contain spaces"
+      "password must contain at least one uppercase letter, one digit, and no spaces"
     );
   }
 }
