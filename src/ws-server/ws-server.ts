@@ -65,7 +65,7 @@ export class WsServer {
           break;
         case ClientRequestType.ATTACK:
         case ClientRequestType.RANDOM_ATTACK:
-          console.log("attack process");
+          console.log(`${type} process`);
           clientService.attack(JSON.parse(data) as ClientAttackData);
           break;
         case ClientRequestType.SINGLE_PLAY:
